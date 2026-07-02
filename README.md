@@ -87,16 +87,16 @@ The `bw` command is the primary interface for developers who live in the termina
 ### Analyze a Bug
 
 ```bash
-bw "TypeError: Cannot read properties of null (reading 'token')"
+bw analyze "TypeError: Cannot read properties of null (reading 'token')"
 
 # With stack trace and language hint
-bw "null has no property 'id'" --stack "at UserService.getUser (auth.ts:65:10)" --lang typescript
+bw analyze "null has no property 'id'" --stack "at UserService.getUser (auth.ts:65:10)" --lang typescript
 
 # With file context
-bw "KeyError: 'cache_key'" --files "app/cache.py,app/models.py" --lang python
+bw analyze "KeyError: 'cache_key'" --files "app/cache.py,app/models.py" --lang python
 
 # Raw JSON output for scripting
-bw "Segfault in process" --json
+bw analyze "Segfault in process" --json
 ```
 
 ### Pipe Errors from Any Command
