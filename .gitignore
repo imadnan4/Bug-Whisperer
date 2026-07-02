@@ -1,0 +1,35 @@
+# Environment
+.env
+.env.local
+.env.cloud
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+data/
+*.db
+
+# Node
+node_modules/
+.next/
+out/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Cognee
+*.log
+.cognee/
+DEMO_SCRIPT.md
+run.sh

@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bug-whisperer"
+version = "1.0.0"
+description = "AI debugger with persistent memory powered by Cognee"
+requires-python = ">=3.10"
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[project.scripts]
+bw = "src.cli:app"
