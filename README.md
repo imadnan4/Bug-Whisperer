@@ -1,5 +1,7 @@
 # Bug Whisperer
 
+![Bug Whisperer Preview](preview.png)
+
 An AI debugger with persistent memory that gets smarter every time you fix a bug.
 
 Built for **"The Hangover Part AI" Hackathon** by WeMakeDevs x Cognee.
