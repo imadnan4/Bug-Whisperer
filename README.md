@@ -110,17 +110,11 @@ npm test 2>&1 | bw pipe --lang typescript
 # Pipe Python errors
 python main.py 2>&1 | bw pipe --lang python
 
-# Pipe Go build errors
-go build ./... 2>&1 | bw pipe --lang go
-
-# Pipe Rust compiler errors
-cargo build 2>&1 | bw pipe --lang rust
-
 # JSON output for CI/CD integration
 pytest 2>&1 | bw pipe --json
 ```
 
-Supported language patterns: Python (tracebacks), JavaScript, TypeScript, Go (panics), Rust (compiler errors), and a generic fallback for any error output.
+Supported language patterns: Python (tracebacks), JavaScript, TypeScript, and a generic fallback for any error output.
 
 ### Save Fixes to Memory
 

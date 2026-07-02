@@ -195,10 +195,33 @@ def stats():
     table.add_row("Total Bugs", str(data.get("total_bugs", 0)))
     table.add_row("Recalled from Memory", str(data.get("bugs_recalled_from_memory", 0)))
     table.add_row("Recall Hit Rate", f"{data.get('recall_hit_rate', 0):.1f}%")
+    table.add_row("Avg Match Confidence", f"{data.get('avg_confidence', 0):.1f}%")
     table.add_row("Time Saved", f"{data.get('estimated_time_saved_minutes', 0)} min")
     table.add_row("Memory Graph Nodes", str(data.get("memory_graph_size", 0)))
 
     console.print(table)
+
+    top_errors = data.get("top_error_types", [])
+    top_files = data.get("top_files", [])
+
+    if top_errors:
+        console.print()
+        err_table = Table(title="Most Common Errors", box=box.SIMPLE)
+        err_table.add_column("Error Type", style="dim")
+        err_table.add_column("Count", justify="right")
+        for e in top_errors:
+            err_table.add_row(e["type"], str(e["count"]))
+        console.print(err_table)
+
+    if top_files:
+        console.print()
+        file_table = Table(title="Most Problematic Files", box=box.SIMPLE)
+        file_table.add_column("File", style="dim")
+        file_table.add_column("Bugs", justify="right")
+        for f in top_files:
+            file_table.add_row(f["file"], str(f["count"]))
+        console.print(file_table)
+
     console.print()
 
 
