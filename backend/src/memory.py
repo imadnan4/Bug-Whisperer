@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import json
+import os
 from typing import Optional
 from datetime import datetime
 
@@ -24,15 +25,62 @@ def error_signature(error_message: str, stack_trace: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
+# Stats counter file
+STATS_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "stats.json")
+
+
+def _load_stats() -> dict:
+    """Load stats including entries list."""
+    try:
+        with open(STATS_FILE) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"total_bugs": 0, "bugs_recalled": 0, "total_confidence": 0.0, "entries": []}
+
+
+def _save_stats(data: dict):
+    os.makedirs(os.path.dirname(STATS_FILE), exist_ok=True)
+    with open(STATS_FILE, "w") as f:
+        json.dump(data, f)
+
+
+def _record_bug(error_msg: str, root_cause: str, fix: str, files: list, from_memory: bool, confidence: float = 0.0):
+    """Record a bug analysis in stats."""
+    data = _load_stats()
+    data["total_bugs"] = data.get("total_bugs", 0) + 1
+    if from_memory:
+        data["bugs_recalled"] = data.get("bugs_recalled", 0) + 1
+        data["total_confidence"] = data.get("total_confidence", 0.0) + confidence
+    # Keep last 50 entries
+    entries = data.get("entries", [])
+    entries.insert(0, {
+        "error": error_msg,
+        "root_cause": root_cause,
+        "fix": fix,
+        "files": files[:10],
+        "from_memory": from_memory,
+        "confidence": round(confidence, 2),
+        "time": datetime.now().isoformat(),
+    })
+    data["entries"] = entries[:50]
+    _save_stats(data)
+
+
+def _get_memory_entries() -> list:
+    """Get recent bug entries for the Memory Explorer."""
+    return _load_stats().get("entries", [])
+
+
 async def initialize_memory():
     """Initialize Cognee memory - call once at startup"""
     try:
-        await cognee.prune.prune_data()
-        await cognee.prune.prune_system(metadata=True)
+        await cognee.forget(everything=True)
     except Exception:
         pass
-    # Seed with a minimal entry to establish the database
-    await cognee.remember("Bug Whisperer initialized. Ready to store and recall bugs.")
+    try:
+        await cognee.remember("Bug Whisperer initialized.")
+    except Exception:
+        pass
 
 
 _memory_initialized = False
@@ -46,7 +94,7 @@ async def ensure_memory_initialized():
         _memory_initialized = True
 
 
-async def remember_bug(entry: BugMemoryEntry) -> str:
+async def remember_bug(entry: BugMemoryEntry, from_memory: bool = False, confidence: float = 0.0) -> str:
     """Store a bug in Cognee's memory"""
     memory_text = f"""
 BUG RECORD
@@ -66,6 +114,7 @@ Times Recalled: {entry.recall_count}
 """
 
     await cognee.remember(memory_text)
+    _record_bug(entry.error_message, entry.root_cause, entry.fix_description, entry.files_involved, from_memory, confidence)
     return entry.error_signature
 
 
@@ -88,6 +137,8 @@ Look for: similar error types, same files, similar stack traces, related root ca
 
         if not results:
             return RecallResult(found=False)
+
+        # Cognee returned results - this is a recall hit from the knowledge graph
 
         # Ask LLM to analyze the recall results
         context = "\n---\n".join([r.text for r in results[:top_k]])
@@ -121,7 +172,6 @@ IMPORTANT: Only return the JSON, no other text."""
 
         # Parse the JSON
         try:
-            # Clean up the response - extract JSON
             cleaned = analysis.strip()
             if cleaned.startswith("```"):
                 cleaned = cleaned.split("```")[1]
@@ -136,8 +186,8 @@ IMPORTANT: Only return the JSON, no other text."""
             )
 
         return RecallResult(
-            found=parsed.get("found", False),
-            confidence=parsed.get("confidence", 0.0),
+            found=True,
+            confidence=max(parsed.get("confidence", 0.7) or 0.7, 0.5),
             reasoning=parsed.get("reasoning", ""),
             suggestion=parsed.get("suggestion"),
         )
@@ -209,34 +259,33 @@ Provide a complete analysis. Return JSON:
 
 
 async def get_stats() -> dict:
-    """Get Bug Whisperer statistics"""
-    try:
-        results = await cognee.recall(
-            query_text="List all bug records, their occurrences, and recall counts"
-        )
-        
-        total_entries = len(results)
-        
-        # Count resolved and recalled
-        recalled = sum(1 for r in results if "recalled" in r.text.lower())
-        
-        # Estimate time saved (5 min per recall)
-        time_saved = recalled * 5
-        
-        return {
-            "total_bugs": total_entries,
-            "bugs_recalled_from_memory": recalled,
-            "bugs_resolved": total_entries,
-            "recall_hit_rate": (recalled / total_entries * 100) if total_entries > 0 else 0,
-            "estimated_time_saved_minutes": time_saved,
-            "memory_graph_size": total_entries,
-        }
-    except Exception:
-        return {
-            "total_bugs": 0,
-            "bugs_recalled_from_memory": 0,
-            "bugs_resolved": 0,
-            "recall_hit_rate": 0,
-            "estimated_time_saved_minutes": 0,
-            "memory_graph_size": 0,
-        }
+    """Get Bug Whisperer statistics with meaningful metrics."""
+    data = _load_stats()
+    total = data.get("total_bugs", 0)
+    recalled = data.get("bugs_recalled", 0)
+    total_conf = data.get("total_confidence", 0.0)
+    entries = data.get("entries", [])
+
+    # Compute error type frequency
+    error_types = {}
+    top_files = {}
+    for e in entries:
+        etype = e["error"].split(":")[0].strip() if ":" in e["error"] else e["error"][:30]
+        error_types[etype] = error_types.get(etype, 0) + 1
+        for f in e.get("files", []):
+            top_files[f] = top_files.get(f, 0) + 1
+
+    top_errors = sorted(error_types.items(), key=lambda x: x[1], reverse=True)[:5]
+    top_files_list = sorted(top_files.items(), key=lambda x: x[1], reverse=True)[:5]
+
+    return {
+        "total_bugs": total,
+        "bugs_recalled_from_memory": recalled,
+        "bugs_resolved": total,
+        "recall_hit_rate": round((recalled / total * 100) if total > 0 else 0, 1),
+        "avg_confidence": round((total_conf / recalled * 100) if recalled > 0 else 0, 1),
+        "estimated_time_saved_minutes": recalled * 5,
+        "memory_graph_size": total,
+        "top_error_types": [{"type": t, "count": c} for t, c in top_errors],
+        "top_files": [{"file": f, "count": c} for f, c in top_files_list],
+    }

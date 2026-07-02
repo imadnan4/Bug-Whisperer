@@ -93,5 +93,8 @@ class StatsResponse(BaseModel):
     bugs_resolved: int = 0
     bugs_recalled_from_memory: int = 0
     recall_hit_rate: float = 0.0
+    avg_confidence: float = 0.0
     estimated_time_saved_minutes: int = 0
     memory_graph_size: int = 0
+    top_error_types: list = []
+    top_files: list = []

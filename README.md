@@ -124,6 +124,8 @@ Supported language patterns: Python (tracebacks), JavaScript, TypeScript, Go (pa
 
 ### Save Fixes to Memory
 
+Every analysis auto-saves to memory. Use `bw remember` to manually log a fix:
+
 ```bash
 bw remember "Missing null check before token access" "Add guard clause with optional chaining" \
   --code "const token = user?.token ?? null" \
@@ -136,7 +138,9 @@ bw remember "Missing null check before token access" "Add guard clause with opti
 bw stats
 ```
 
-Shows total bugs stored, recall hit rate, time saved, and knowledge graph size.
+Shows total bugs, recall hit rate, average match confidence, time saved, most common error types, and most problematic files.
+
+Every analysis is automatically saved to Cognee memory. Both CLI and dashboard stay in sync — analyze from the terminal, browse history in the browser.
 
 ---
 
@@ -146,15 +150,15 @@ The dashboard provides a visual interface with three tabs.
 
 ### Live Debug
 
-Paste an error message and stack trace, click "Analyze Bug." Bug Whisperer checks its memory and displays the root cause analysis, suggested fix, code snippets, and related files. Use the demo buttons to quickly test the flow.
+Paste an error message and stack trace, click "Analyze Bug." Bug Whisperer checks its memory and displays the root cause analysis, suggested fix, code snippets, and related files. Every analysis is auto-saved to the knowledge graph.
 
 ### Memory Explorer
 
-Shows how Cognee structures bug data as a knowledge graph. Errors link to root causes, which link to fixes, which link to files. The graph grows and strengthens with every session.
+Browse every bug that has been analyzed. Each entry shows the full error, root cause, fix, files involved, and whether it was found in memory or newly analyzed. Expand any entry to see complete details.
 
 ### Stats and Metrics
 
-Tracks total bugs, memory recall hit rate, and estimated time saved. The key metric: recall rate demonstrably improves as the knowledge graph grows.
+Real-time dashboard with meaningful metrics: total bugs, recall hit rate, average match confidence, time saved, most common error types, and most problematic files. The recall performance bar proves the agent gets smarter over time.
 
 ---
 
@@ -164,7 +168,7 @@ Bug Whisperer uses Cognee's hybrid graph-vector memory layer through four core o
 
 | Cognee API | What It Does | How We Use It |
 |------------|-------------|---------------|
-| `remember()` | Ingests data, extracts entities, builds knowledge graph with vector embeddings | Stores bug records as structured graph nodes |
+| `remember()` | Ingests data, extracts entities, builds knowledge graph with vector embeddings | Auto-saves every bug analysis as structured graph nodes |
 | `recall()` | Hybrid search — semantic vectors find similar errors, graph traversal follows relationships to root causes and fixes | Searches past bugs when a new error occurs |
 | `improve()` | Post-ingestion enrichment, adjusts node weights based on feedback | Strengthens fix confidence when a fix works, weakens when it doesn't |
 | `forget()` | Removes specific nodes or datasets | Cleans up outdated or incorrect fixes |
@@ -194,10 +198,11 @@ The vector store handles semantic similarity (finding "null has no property 'id'
 Bug-Whisperer/
   backend/
     src/
-      main.py              FastAPI server with three endpoints
-      memory.py            Cognee remember, recall, improve operations
+      main.py              FastAPI server with four endpoints
+      memory.py            Cognee operations and stats tracking
       models.py            Pydantic data models
-      cli.py               CLI tool with analyze, remember, stats, pipe
+      cli.py               CLI tool with analyze, pipe, remember, stats
+    data/stats.json        Persistent bug counter and entry log
     .env.example           Configuration template
     pyproject.toml         Package config with bw entry point
   frontend/

@@ -25,8 +25,21 @@ export interface Stats {
   bugs_resolved: number;
   bugs_recalled_from_memory: number;
   recall_hit_rate: number;
+  avg_confidence: number;
   estimated_time_saved_minutes: number;
   memory_graph_size: number;
+  top_error_types: { type: string; count: number }[];
+  top_files: { file: string; count: number }[];
+}
+
+export interface MemoryEntry {
+  error: string;
+  root_cause: string;
+  fix: string;
+  files: string[];
+  from_memory: boolean;
+  confidence: number;
+  time: string;
 }
 
 export async function analyzeBug(
@@ -69,5 +82,11 @@ export async function rememberFix(data: {
 export async function getStats(): Promise<Stats> {
   const res = await fetch(`${API_BASE}/api/stats`);
   if (!res.ok) throw new Error("Failed to fetch stats");
+  return res.json();
+}
+
+export async function getMemoryEntries(): Promise<MemoryEntry[]> {
+  const res = await fetch(`${API_BASE}/api/memory/entries`);
+  if (!res.ok) throw new Error("Failed to fetch memory entries");
   return res.json();
 }

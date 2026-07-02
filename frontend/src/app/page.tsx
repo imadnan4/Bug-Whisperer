@@ -15,10 +15,10 @@ import { Spinner } from "@/components/optics/spinner";
 import { Separator } from "@/components/optics/separator";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/optics/accordion";
 import { Alert, AlertDescription, AlertTitle } from "@/components/optics/alert";
-import { Bug, Zap, Brain, Clock, Search, Terminal, Save, History, BarChart3, Play, CheckCircle2, AlertTriangle, Lightbulb, TrendingUp } from "lucide-react";
+import { Bug, Zap, Brain, Clock, Search, Terminal, History, BarChart3, Play, CheckCircle2, AlertTriangle, Lightbulb, TrendingUp } from "lucide-react";
 import { ThemeSwitcher } from "@/components/optics/theme-switcher";
 
-import { analyzeBug, rememberFix, getStats, BugAnalysis, Stats } from "@/lib/api";
+import { analyzeBug, getStats, getMemoryEntries, BugAnalysis, Stats, MemoryEntry } from "@/lib/api";
 
 const DEMO_BUGS = [
   {
@@ -73,11 +73,11 @@ export default function Home() {
   const [stackTrace, setStackTrace] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [currentAnalysis, setCurrentAnalysis] = useState<BugAnalysis | null>(null);
-  const [fixSubmitted, setFixSubmitted] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loadingStats, setLoadingStats] = useState(false);
   const [sessionId, setSessionId] = useState<string>("");
   const [bugHistory, setBugHistory] = useState<Array<{ error: string; fromMemory: boolean; time: string }>>([]);
+  const [memoryEntries, setMemoryEntries] = useState<MemoryEntry[]>([]);
 
   const handleAnalyze = useCallback(async () => {
     if (!errorMessage.trim()) {
@@ -85,7 +85,6 @@ export default function Home() {
       return;
     }
     setAnalyzing(true);
-    setFixSubmitted(false);
     try {
       const result = await analyzeBug(errorMessage, stackTrace);
       setCurrentAnalysis(result);
@@ -95,9 +94,9 @@ export default function Home() {
         ...prev,
       ]);
       if (result.recall.found) {
-        toast.success(`Found matching bug in memory! ${Math.round(result.recall.confidence * 100)}% confidence`);
+        toast.success(`Memory match found - ${Math.round(result.recall.confidence * 100)}% confidence. Auto-saved.`);
       } else {
-        toast.info("No matching bug in memory. Analyzing from scratch...");
+        toast.info("New bug pattern - analyzed and auto-saved to memory.");
       }
     } catch (e: any) {
       toast.error(`Analysis failed: ${e.message}`);
@@ -105,23 +104,6 @@ export default function Home() {
       setAnalyzing(false);
     }
   }, [errorMessage, stackTrace]);
-
-  const handleRemember = useCallback(async () => {
-    if (!currentAnalysis || !sessionId) return;
-    try {
-      await rememberFix({
-        session_id: sessionId,
-        root_cause: currentAnalysis.analysis.root_cause_analysis,
-        fix_description: currentAnalysis.analysis.suggested_fix,
-        code_snippet: currentAnalysis.analysis.code_snippet || undefined,
-        files_changed: currentAnalysis.analysis.related_files,
-      });
-      setFixSubmitted(true);
-      toast.success("Bug and fix stored in memory.");
-    } catch (e: any) {
-      toast.error(`Failed to store: ${e.message}`);
-    }
-  }, [currentAnalysis, sessionId]);
 
   const loadDemoBug = useCallback((bug: (typeof DEMO_BUGS)[0]) => {
     setErrorMessage(bug.error);
@@ -137,6 +119,15 @@ export default function Home() {
       toast.error("Failed to load stats");
     } finally {
       setLoadingStats(false);
+    }
+  }, []);
+
+  const loadMemoryEntries = useCallback(async () => {
+    try {
+      const entries = await getMemoryEntries();
+      setMemoryEntries(entries);
+    } catch {
+      // silent fail
     }
   }, []);
 
@@ -177,7 +168,7 @@ export default function Home() {
                 <Terminal className="w-4 h-4" />
                 Live Debug
               </TabsTrigger>
-              <TabsTrigger value="memory" className="gap-2">
+              <TabsTrigger value="memory" className="gap-2" onClick={() => { loadStats(); loadMemoryEntries(); }}>
                 <Brain className="w-4 h-4" />
                 Memory Explorer
               </TabsTrigger>
@@ -396,24 +387,10 @@ export default function Home() {
 
                           <Separator />
 
-                          <Button
-                            className="gap-2"
-                            variant={fixSubmitted ? "outline" : "info"}
-                            onClick={handleRemember}
-                            disabled={fixSubmitted}
-                          >
-                            {fixSubmitted ? (
-                              <>
-                                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                                Saved to Memory
-                              </>
-                            ) : (
-                              <>
-                                <Save className="w-4 h-4" />
-                                Save Fix to Memory
-                              </>
-                            )}
-                          </Button>
+                          <Badge variant="outline" className="justify-center py-2 border-emerald-500/30 text-emerald-600 dark:text-emerald-300 bg-emerald-500/5">
+                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                            Auto-saved to memory
+                          </Badge>
                         </CardContent>
                       </Card>
 
@@ -475,66 +452,69 @@ export default function Home() {
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Brain className="w-5 h-5 text-violet-400" />
-                    Knowledge Graph Memory
+                    <Brain className="w-5 h-5 text-violet-500" />
+                    Recent Bug Entries
                   </CardTitle>
                   <CardDescription>
-                    Every bug and fix is stored as a structured knowledge graph in Cognee.
-                    Error patterns link to root causes, which link to fixes, which link to files.
+                    Every analyzed bug is stored here. Click the Stats tab for metrics.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Card className="bg-muted/50 border">
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm">How Cognee Memory Works</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-3 text-sm text-muted-foreground">
-                        <div className="flex gap-2">
-                          <Badge className="bg-violet-500/10 text-violet-300 border-violet-500/20 shrink-0">1</Badge>
-                          <span>
-                            <strong className="text-foreground">remember()</strong> — Ingests bug data, extracts entities (error types, files, functions), and builds a knowledge graph with vector embeddings.
-                          </span>
-                        </div>
-                        <div className="flex gap-2">
-                          <Badge className="bg-violet-500/10 text-violet-300 border-violet-500/20 shrink-0">2</Badge>
-                          <span>
-                            <strong className="text-foreground">recall()</strong> — Hybrid search: semantic vector search finds similar errors, then graph traversal follows relationships to root causes and fixes.
-                          </span>
-                        </div>
-                        <div className="flex gap-2">
-                          <Badge className="bg-violet-500/10 text-violet-300 border-violet-500/20 shrink-0">3</Badge>
-                          <span>
-                            <strong className="text-foreground">improve()</strong> — Feedback loop: when a fix works, memory strengthens. When it doesn't, it adapts.
-                          </span>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="bg-muted/50 border">
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm">Graph Structure</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <CodeBlock
-                          code={`Error: "TypeError: Cannot read null.token"
-  ├── Type: NullReferenceError
-  ├── File: middleware/auth.ts
-  ├── Root Cause: Missing null check
-  ├── Fix: Add guard clause before token access
-  ├── Related Errors:
-  │   ├── "TypeError: null has no property 'id'"
-  │   └── "Cannot destructure property of null"
-  └── Stats:
-      ├── Occurrences: 3
-      ├── Recall Count: 12
-      └── Fix Success Rate: 100%`}
-                          language="plaintext"
-                          className="text-xs"
-                        />
-                      </CardContent>
-                    </Card>
-                  </div>
+                  {memoryEntries.length === 0 ? (
+                    <div className="py-8 text-center">
+                      <p className="text-muted-foreground">No bugs analyzed yet.</p>
+                      <p className="text-xs text-muted-foreground mt-1">Use the CLI or Live Debug tab to start building memory.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-[500px] overflow-auto">
+                      {memoryEntries.map((entry, i) => (
+                        <Accordion type="single" collapsible key={i}>
+                          <AccordionItem value={`entry-${i}`}>
+                            <AccordionTrigger className="text-sm hover:no-underline">
+                              <div className="flex items-center gap-2 text-left">
+                                {entry.from_memory ? (
+                                  <Badge variant="outline" className="border-violet-500/30 text-violet-600 dark:text-violet-300 bg-violet-500/5 shrink-0 text-xs">
+                                    Memory
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="border-amber-500/30 text-amber-600 dark:text-amber-300 bg-amber-500/5 shrink-0 text-xs">
+                                    New
+                                  </Badge>
+                                )}
+                                <span className="truncate">{entry.error}</span>
+                              </div>
+                            </AccordionTrigger>
+                            <AccordionContent className="space-y-3 pt-2 overflow-visible">
+                              <div>
+                                <p className="text-xs font-semibold text-muted-foreground">Root Cause</p>
+                                <p className="text-sm">{entry.root_cause}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold text-muted-foreground">Fix</p>
+                                <p className="text-sm">{entry.fix}</p>
+                              </div>
+                              {entry.files.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-semibold text-muted-foreground">Files</p>
+                                  <div className="flex gap-1 flex-wrap mt-1">
+                                    {entry.files.map((f, j) => (
+                                      <Badge key={j} variant="outline" className="text-xs font-mono">{f}</Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {entry.from_memory && (
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                  <span>Match confidence: {Math.round(entry.confidence * 100)}%</span>
+                                </div>
+                              )}
+                              <p className="text-xs text-muted-foreground">{new Date(entry.time).toLocaleString()}</p>
+                            </AccordionContent>
+                          </AccordionItem>
+                        </Accordion>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

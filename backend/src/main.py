@@ -27,6 +27,7 @@ from .memory import (
     analyze_bug,
     error_signature,
     get_stats,
+    _get_memory_entries,
 )
 
 
@@ -59,13 +60,32 @@ async def root():
 
 @app.post("/api/bugs/analyze", response_model=dict)
 async def analyze_new_bug(req: NewBugRequest):
-    """Analyze a new bug — checks memory first, then uses LLM"""
+    """Analyze a new bug — checks memory first, then uses LLM.
+    Automatically saves the analysis to Cognee memory."""
     await ensure_memory_initialized()
     # 1. Check memory for similar bugs
     recall = await recall_similar_bugs(req.error_message, req.stack_trace)
 
     # 2. Analyze with LLM (augmented by memory)
     analysis = await analyze_bug(req.error_message, req.stack_trace, recall)
+
+    # 3. Auto-save to Cognee memory so CLI and dashboard stay in sync
+    sig = error_signature(
+        analysis.get("root_cause_analysis", req.error_message),
+        analysis.get("suggested_fix", ""),
+    )
+    entry = BugMemoryEntry(
+        error_signature=sig,
+        error_message=req.error_message,
+        stack_trace=req.stack_trace,
+        root_cause=analysis.get("root_cause_analysis", req.error_message),
+        fix_description=analysis.get("suggested_fix", ""),
+        code_snippet=analysis.get("code_snippet"),
+        files_involved=req.files_involved,
+        language=req.language,
+        severity=BugSeverity(analysis.get("severity", "medium")),
+    )
+    await remember_bug(entry, from_memory=recall.found, confidence=recall.confidence)
 
     return {
         "recall": recall.model_dump(),
@@ -101,6 +121,13 @@ async def get_dashboard_stats():
     await ensure_memory_initialized()
     stats = await get_stats()
     return StatsResponse(**stats)
+
+
+@app.get("/api/memory/entries")
+async def get_memory_entries():
+    """Get recent bug entries for the Memory Explorer."""
+    await ensure_memory_initialized()
+    return _get_memory_entries()
 
 
 @app.get("/api/health")
