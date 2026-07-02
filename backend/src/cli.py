@@ -1,14 +1,15 @@
-"""Bug Whisperer CLI — Debug from your terminal.
+"""Bug Whisperer CLI - Debug from your terminal.
 
 Usage:
     bw "TypeError: Cannot read properties of null"
     bw --stack "at auth.ts:42" "TypeError: null.token"
-    bw --watch          # Watch terminal for errors (coming soon)
+    npm test 2>&1 | bw pipe
 """
 
 import sys
 import json
-from typing import Optional
+import re
+from typing import Optional, List
 
 import typer
 import httpx
@@ -198,6 +199,166 @@ def stats():
     table.add_row("Memory Graph Nodes", str(data.get("memory_graph_size", 0)))
 
     console.print(table)
+    console.print()
+
+
+# ── Error Extraction Patterns ──
+
+ERROR_PATTERNS = {
+    "python": re.compile(
+        r"(Traceback \(most recent call last\):.*?)(?=\n\n|\nTraceback|\Z)",
+        re.DOTALL,
+    ),
+    "javascript": re.compile(
+        r"((?:TypeError|ReferenceError|SyntaxError|RangeError|Error|URIError|EvalError|InternalError)[^\n]*?(?:\n\s+at\s[^\n]*)+)",
+        re.MULTILINE,
+    ),
+    "typescript": re.compile(
+        r"((?:TypeError|ReferenceError|SyntaxError|RangeError|Error)[^\n]*?(?:\n\s+at\s[^\n]*)+)",
+        re.MULTILINE,
+    ),
+    "go": re.compile(
+        r"(panic:.*?(?:\n\s+.*?)*?)(?=\n\n|\npanic:|\Z)",
+        re.DOTALL,
+    ),
+    "rust": re.compile(
+        r"(error\[E\d+\]:.*?(?:\n\s+-->.*?)*?)(?=\n\n|\nerror\[|\Z)",
+        re.DOTALL,
+    ),
+    "generic": re.compile(
+        r"((?:error|Error|ERROR|FAIL|FAILURE|Exception|Fatal)[^\n]*?(?:\n\s+.*?){0,5})",
+        re.MULTILINE,
+    ),
+}
+
+
+def extract_errors(text: str, lang: str = "generic") -> List[str]:
+    """Extract error messages from text output using language-specific patterns."""
+    pattern = ERROR_PATTERNS.get(lang, ERROR_PATTERNS["generic"])
+    matches = pattern.findall(text)
+    if not matches and lang != "generic":
+        matches = ERROR_PATTERNS["generic"].findall(text)
+    return [m.strip() for m in matches if len(m.strip()) > 20]
+
+
+def _check_backend():
+    """Check if backend is reachable."""
+    try:
+        resp = httpx.get(api_url("/api/health"), timeout=5.0)
+        return resp.status_code == 200
+    except Exception:
+        return False
+
+
+@app.command()
+def pipe(
+    lang: str = typer.Option("generic", "--lang", "-l", help="Language hint: python, javascript, typescript, go, rust"),
+    json_output: bool = typer.Option(False, "--json", "-j", help="Output raw JSON"),
+):
+    """Read from stdin and analyze every error found in the output.
+
+    Pipe your build, test, or any command output directly:
+        npm test 2>&1 | bw pipe
+        python main.py 2>&1 | bw pipe --lang python
+        go build ./... 2>&1 | bw pipe --lang go
+    """
+    if sys.stdin.isatty():
+        console.print("[yellow]Waiting for piped input...[/yellow]")
+        console.print("[dim]Usage: some_command 2>&1 | bw pipe[/dim]")
+        console.print("[dim]       npm test 2>&1 | bw pipe --lang typescript[/dim]")
+        raise typer.Exit(code=0)
+
+    if not _check_backend():
+        console.print("[red]Cannot connect to backend. Is it running?[/red]")
+        console.print("[dim]uvicorn src.main:app --port 8000[/dim]")
+        raise typer.Exit(code=1)
+
+    stdin_text = sys.stdin.read()
+    if not stdin_text.strip():
+        console.print("[dim]No input received.[/dim]")
+        raise typer.Exit(code=0)
+
+    errors = extract_errors(stdin_text, lang)
+
+    if not errors:
+        console.print("[dim]No errors detected in input.[/dim]")
+        raise typer.Exit(code=0)
+
+    console.print(f"\n[bold]Found {len(errors)} error(s) in output.[/bold]")
+    console.print(f"[dim]Language hint: {lang}[/dim]\n")
+
+    if json_output:
+        results = []
+
+    for i, error in enumerate(errors, 1):
+        if len(errors) > 1:
+            console.rule(f"[bold]Error {i}/{len(errors)}[/bold]")
+
+        with console.status(f"[bold violet]Analyzing error {i}/{len(errors)}...[/bold violet]", spinner="dots"):
+            try:
+                resp = httpx.post(
+                    api_url("/api/bugs/analyze"),
+                    json={
+                        "error_message": error[:500],
+                        "stack_trace": "",
+                        "language": lang,
+                        "files_involved": [],
+                    },
+                    timeout=60.0,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+            except Exception as e:
+                console.print(f"[red]Failed: {e}[/red]")
+                continue
+
+        if json_output:
+            results.append({"error": error[:200], "result": data})
+            continue
+
+        recall = data["recall"]
+        analysis = data["analysis"]
+
+        console.print()
+        if recall["found"]:
+            confidence = recall["confidence"]
+            color = "green" if confidence > 0.7 else "yellow"
+            console.print(
+                Panel(
+                    f"[bold {color}]Memory Match ({confidence:.0%})[/bold {color}]\n"
+                    f"[dim]{recall.get('reasoning', '')}[/dim]",
+                    border_style=color,
+                    title=f"[bold]Error {i}[/bold]",
+                )
+            )
+        else:
+            console.print(
+                Panel(
+                    f"[dim]{error[:300]}[/dim]",
+                    border_style="yellow",
+                    title=f"[bold]Error {i} - New Pattern[/bold]",
+                )
+            )
+
+        console.print(Panel(Text(analysis.get("root_cause_analysis", "")), title="Root Cause", border_style="dim"))
+        console.print(Panel(Text(analysis.get("suggested_fix", "")), title="Suggested Fix", border_style="green"))
+
+        code = analysis.get("code_snippet")
+        if code:
+            console.print(Panel(Text(code, style="dim"), title="Code", border_style="dim"))
+
+    if json_output:
+        console.print_json(json.dumps(results))
+        return
+
+    console.print()
+    summary = Table(title="Summary", box=box.ROUNDED)
+    summary.add_column("Metric", style="dim")
+    summary.add_column("Value")
+    summary.add_row("Errors Found", str(len(errors)))
+    summary.add_row("Analyzed", str(len(errors)))
+    summary.add_row("Save to Memory", "bw remember 'cause' 'fix'")
+    console.print(summary)
     console.print()
 
 
