@@ -132,9 +132,7 @@ bw remember "Missing null check before token access" "Add guard clause with opti
 bw stats
 ```
 
-Shows total bugs, recall hit rate, average match confidence, time saved, most common error types, and most problematic files.
-
-Every analysis is automatically saved to Cognee memory. Both CLI and dashboard stay in sync — analyze from the terminal, browse history in the browser.
+Shows total bugs, recall hit rate, average match confidence, time saved, most common error types, and most problematic files. Both CLI and dashboard stay in sync — analyze from the terminal, browse history in the browser.
 
 ---
 
