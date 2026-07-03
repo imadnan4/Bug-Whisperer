@@ -7,6 +7,12 @@ name = "bug-whisperer"
 version = "1.0.0"
 description = "AI debugger with persistent memory powered by Cognee"
 requires-python = ">=3.10"
+dependencies = [
+    "cognee[fastembed]>=1.2.0",
+    "httpx>=0.27.0",
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -62,12 +62,25 @@ uvicorn src.main:app --port 8000
 
 #### 2. CLI
 
+Install directly from GitHub:
+
 ```bash
-cd backend
-source .venv/bin/activate
-uv pip install -e .
-bw --help
+pip install git+https://github.com/imadnan4/Bug-Whisperer.git#subdirectory=backend
 ```
+
+Then set your environment variables and use it anywhere:
+
+```bash
+export LLM_API_KEY=your_key_here
+export LLM_ENDPOINT=https://api.deepseek.com/v1
+
+# Point to deployed backend (or skip for localhost)
+export BW_API_URL=https://backend-production-efdc.up.railway.app
+
+bw analyze "TypeError: Cannot read properties of null"
+```
+
+Or install locally for development:
 
 #### 3. Web Dashboard
 

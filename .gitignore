@@ -33,3 +33,6 @@ Thumbs.db
 .cognee/
 DEMO_SCRIPT.md
 run.sh
+
+# Local Netlify folder
+.netlify

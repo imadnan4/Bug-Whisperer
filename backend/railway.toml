@@ -1,0 +1,9 @@
+# Railway deployment config for Bug Whisperer backend
+# Railway auto-detects Python with nixpacks
+
+[build]
+# Nixpacks will detect Python from pyproject.toml
+# Cognee needs fastembed extra for embeddings
+
+[deploy]
+startCommand = "uvicorn src.main:app --host 0.0.0.0 --port $PORT"

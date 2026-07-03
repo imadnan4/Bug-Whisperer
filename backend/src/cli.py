@@ -7,6 +7,7 @@ Usage:
 """
 
 import sys
+import os
 import json
 import re
 from typing import Optional, List
@@ -26,7 +27,7 @@ app = typer.Typer(
 )
 
 console = Console()
-API_BASE = "http://localhost:8000"
+API_BASE = os.environ.get("BW_API_URL", "http://localhost:8000")
 
 
 def api_url(path: str) -> str:
