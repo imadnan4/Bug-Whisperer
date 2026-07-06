@@ -28,6 +28,15 @@ app = typer.Typer(
 
 console = Console()
 API_BASE = os.environ.get("BW_API_URL", "http://localhost:8000")
+API_KEY = os.environ.get("BW_API_KEY", None)
+
+
+def _headers() -> dict:
+    """Build request headers with API key if available."""
+    headers = {}
+    if API_KEY:
+        headers["X-API-Key"] = API_KEY
+    return headers
 
 
 def api_url(path: str) -> str:
@@ -56,6 +65,7 @@ def analyze(
                     "files_involved": files_list,
                 },
                 timeout=60.0,
+                headers=_headers(),
             )
             resp.raise_for_status()
             data = resp.json()
@@ -160,6 +170,7 @@ def remember(
                     "files_changed": files_list,
                 },
                 timeout=30.0,
+                headers=_headers(),
             )
             resp.raise_for_status()
             data = resp.json()
@@ -181,7 +192,8 @@ def stats():
     """Show Bug Whisperer statistics."""
     with console.status("[bold violet]Loading stats...[/bold violet]", spinner="dots"):
         try:
-            resp = httpx.get(api_url("/api/stats"), timeout=10.0)
+            resp = httpx.get(api_url("/api/stats"), timeout=10.0,
+                headers=_headers())
             resp.raise_for_status()
             data = resp.json()
         except httpx.ConnectError:
@@ -268,7 +280,8 @@ def extract_errors(text: str, lang: str = "generic") -> List[str]:
 def _check_backend():
     """Check if backend is reachable."""
     try:
-        resp = httpx.get(api_url("/api/health"), timeout=5.0)
+        resp = httpx.get(api_url("/api/health"), timeout=5.0,
+            headers=_headers())
         return resp.status_code == 200
     except Exception:
         return False
@@ -329,6 +342,7 @@ def pipe(
                         "files_involved": [],
                     },
                     timeout=60.0,
+                headers=_headers(),
                 )
                 resp.raise_for_status()
                 data = resp.json()

@@ -6,6 +6,7 @@ import json
 import os
 from typing import Optional
 from datetime import datetime
+from contextlib import contextmanager
 
 import cognee
 from cognee.infrastructure.llm.LLMGateway import LLMGateway
@@ -17,6 +18,26 @@ from .models import (
     DebugSession,
     FixRecord,
 )
+
+
+_lock = asyncio.Lock()
+
+
+@contextmanager
+def _use_api_key(api_key: Optional[str]):
+    """Temporarily swap LLM_API_KEY for this request. Falls back to env var."""
+    if not api_key:
+        yield
+        return
+    original = os.environ.get("LLM_API_KEY", "")
+    os.environ["LLM_API_KEY"] = api_key
+    try:
+        yield
+    finally:
+        if original:
+            os.environ["LLM_API_KEY"] = original
+        else:
+            os.environ.pop("LLM_API_KEY", None)
 
 
 def error_signature(error_message: str, stack_trace: str) -> str:
@@ -122,6 +143,7 @@ async def recall_similar_bugs(
     error_message: str,
     stack_trace: str = "",
     top_k: int = 3,
+    api_key: Optional[str] = None,
 ) -> RecallResult:
     """Search Cognee memory for similar past bugs"""
     query = f"""
@@ -164,11 +186,12 @@ Analyze whether any past bugs are relevant. Return JSON:
 
 IMPORTANT: Only return the JSON, no other text."""
 
-        analysis = await LLMGateway.acreate_structured_output(
-            text_input=analysis_prompt,
-            system_prompt="You are a precise debugging expert. Return only valid JSON.",
-            response_model=str,
-        )
+        with _use_api_key(api_key):
+            analysis = await LLMGateway.acreate_structured_output(
+                text_input=analysis_prompt,
+                system_prompt="You are a precise debugging expert. Return only valid JSON.",
+                response_model=str,
+            )
 
         # Parse the JSON
         try:
@@ -203,6 +226,7 @@ async def analyze_bug(
     error_message: str,
     stack_trace: str = "",
     recall_result: Optional[RecallResult] = None,
+    api_key: Optional[str] = None,
 ) -> dict:
     """Analyze a bug using DeepSeek, optionally augmented with memory"""
     
@@ -234,11 +258,12 @@ Provide a complete analysis. Return JSON:
 }}"""
 
     try:
-        response = await LLMGateway.acreate_structured_output(
-            text_input=prompt,
-            system_prompt="You are a world-class debugging expert. Return only valid JSON.",
-            response_model=str,
-        )
+        with _use_api_key(api_key):
+            response = await LLMGateway.acreate_structured_output(
+                text_input=prompt,
+                system_prompt="You are a world-class debugging expert. Return only valid JSON.",
+                response_model=str,
+            )
 
         cleaned = response.strip()
         if cleaned.startswith("```"):

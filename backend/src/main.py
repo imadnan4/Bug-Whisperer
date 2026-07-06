@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
@@ -59,15 +59,19 @@ async def root():
 
 
 @app.post("/api/bugs/analyze", response_model=dict)
-async def analyze_new_bug(req: NewBugRequest):
+async def analyze_new_bug(req: NewBugRequest, request: Request):
     """Analyze a new bug — checks memory first, then uses LLM.
     Automatically saves the analysis to Cognee memory."""
     await ensure_memory_initialized()
+
+    # Use user-provided API key if present, else server default
+    api_key = request.headers.get("X-API-Key")
+
     # 1. Check memory for similar bugs
-    recall = await recall_similar_bugs(req.error_message, req.stack_trace)
+    recall = await recall_similar_bugs(req.error_message, req.stack_trace, api_key=api_key)
 
     # 2. Analyze with LLM (augmented by memory)
-    analysis = await analyze_bug(req.error_message, req.stack_trace, recall)
+    analysis = await analyze_bug(req.error_message, req.stack_trace, recall, api_key=api_key)
 
     # 3. Auto-save to Cognee memory so CLI and dashboard stay in sync
     sig = error_signature(
