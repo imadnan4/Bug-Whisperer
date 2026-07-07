@@ -106,7 +106,18 @@ export default function Home() {
         toast.info("New bug pattern - analyzed and auto-saved to memory.");
       }
     } catch (e: any) {
-      toast.error(`Analysis failed: ${e.message}`);
+      const msg = e?.message || "";
+      if (msg.includes("Invalid or missing API key") || msg.includes("401")) {
+        toast.error("Invalid API key. Please check your DeepSeek key and try again.", { duration: 6000 });
+      } else if (msg.includes("Server error") || msg.includes("500")) {
+        toast.error("Server is temporarily unavailable. Please try again in a moment.", { duration: 5000 });
+      } else if (msg.includes("fetch") || msg.includes("Network") || msg.includes("Failed to fetch")) {
+        toast.error("Cannot reach the server. Check your internet connection.", { duration: 5000 });
+      } else if (msg.includes("timeout") || msg.includes("abort")) {
+        toast.error("Request timed out. The server might be busy. Try again.", { duration: 5000 });
+      } else {
+        toast.error(msg || "Something went wrong. Please try again.", { duration: 5000 });
+      }
     } finally {
       setAnalyzing(false);
     }

@@ -69,9 +69,25 @@ export async function analyzeBug(
       language,
       files_involved: filesInvolved,
     }),
+    signal: AbortSignal.timeout(60000),
   });
-  if (!res.ok) throw new Error("Analysis failed");
-  return res.json();
+
+  if (res.status === 401) {
+    throw new Error("Invalid or missing API key. Please check your DeepSeek key.");
+  }
+  if (res.status === 500 || res.status === 502 || res.status === 503) {
+    throw new Error("Server error. The backend might be starting up or overloaded. Try again.");
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `Request failed (${res.status}). Please try again.`);
+  }
+
+  const data = await res.json();
+  if (!data?.analysis?.root_cause_analysis) {
+    throw new Error("Analysis incomplete. The LLM might have failed. Check your API key.");
+  }
+  return data;
 }
 
 export async function rememberFix(data: {

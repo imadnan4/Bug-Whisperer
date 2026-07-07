@@ -62,47 +62,52 @@ async def root():
 @app.post("/api/bugs/analyze", response_model=dict)
 async def analyze_new_bug(req: NewBugRequest, request: Request):
     """Analyze a new bug. Uses X-API-Key header if provided, else returns error."""
-    await ensure_memory_initialized()
-
-    api_key = request.headers.get("X-API-Key")
-    if not api_key and not os.environ.get("LLM_API_KEY"):
-        raise HTTPException(
-            status_code=401,
-            detail="API key required. Pass X-API-Key header or set LLM_API_KEY on server.",
-        )
-
-    # 1. Check memory for similar bugs
-    recall = await recall_similar_bugs(req.error_message, req.stack_trace, api_key=api_key)
-
-    # 2. Analyze with LLM (augmented by memory)
-    analysis = await analyze_bug(req.error_message, req.stack_trace, recall, api_key=api_key)
-
-    # 3. Auto-save to Cognee memory so CLI and dashboard stay in sync
-    sig = error_signature(
-        analysis.get("root_cause_analysis", req.error_message),
-        analysis.get("suggested_fix", ""),
-    )
-    entry = BugMemoryEntry(
-        error_signature=sig,
-        error_message=req.error_message,
-        stack_trace=req.stack_trace,
-        root_cause=analysis.get("root_cause_analysis", req.error_message),
-        fix_description=analysis.get("suggested_fix", ""),
-        code_snippet=analysis.get("code_snippet"),
-        files_involved=req.files_involved,
-        language=req.language,
-        severity=BugSeverity(analysis.get("severity", "medium")),
-    )
     try:
-        await remember_bug(entry, from_memory=recall.found, confidence=recall.confidence, api_key=api_key)
-    except Exception:
-        pass  # Non-critical: memory storage can fail gracefully
+        await ensure_memory_initialized()
 
-    return {
-        "recall": recall.model_dump(),
-        "analysis": analysis,
-        "session_id": f"session_{datetime.now().timestamp()}",
-    }
+        api_key = request.headers.get("X-API-Key")
+        if not api_key and not os.environ.get("LLM_API_KEY"):
+            raise HTTPException(
+                status_code=401,
+                detail="API key required",
+            )
+
+        # 1. Check memory for similar bugs
+        recall = await recall_similar_bugs(req.error_message, req.stack_trace, api_key=api_key)
+
+        # 2. Analyze with LLM (augmented by memory)
+        analysis = await analyze_bug(req.error_message, req.stack_trace, recall, api_key=api_key)
+
+        # 3. Auto-save to Cognee memory
+        sig = error_signature(
+            analysis.get("root_cause_analysis", req.error_message),
+            analysis.get("suggested_fix", ""),
+        )
+        entry = BugMemoryEntry(
+            error_signature=sig,
+            error_message=req.error_message,
+            stack_trace=req.stack_trace,
+            root_cause=analysis.get("root_cause_analysis", req.error_message),
+            fix_description=analysis.get("suggested_fix", ""),
+            code_snippet=analysis.get("code_snippet"),
+            files_involved=req.files_involved,
+            language=req.language,
+            severity=BugSeverity(analysis.get("severity", "medium")),
+        )
+        try:
+            await remember_bug(entry, from_memory=recall.found, confidence=recall.confidence, api_key=api_key)
+        except Exception:
+            pass
+
+        return {
+            "recall": recall.model_dump(),
+            "analysis": analysis,
+            "session_id": f"session_{datetime.now().timestamp()}",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Analysis failed. Please check your API key and try again.")
 
 
 @app.post("/api/bugs/remember", response_model=dict)
