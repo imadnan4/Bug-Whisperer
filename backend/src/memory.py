@@ -93,15 +93,8 @@ def _get_memory_entries() -> list:
 
 
 async def initialize_memory():
-    """Initialize Cognee memory - call once at startup"""
-    try:
-        await cognee.forget(everything=True)
-    except Exception:
-        pass
-    try:
-        await cognee.remember("Bug Whisperer initialized.")
-    except Exception:
-        pass
+    """Initialize Cognee memory - minimal startup."""
+    pass  # Skip heavy init on Railway free tier
 
 
 _memory_initialized = False
@@ -135,7 +128,7 @@ Times Recalled: {entry.recall_count}
 """
 
     with _use_api_key(api_key):
-        await cognee.remember(memory_text)
+        await cognee.remember(memory_text, self_improvement=False)
     _record_bug(entry.error_message, entry.root_cause, entry.fix_description, entry.files_involved, from_memory, confidence)
     return entry.error_signature
 
