@@ -63,14 +63,16 @@ async def root():
 async def analyze_new_bug(req: NewBugRequest, request: Request):
     """Analyze a new bug. Uses X-API-Key header if provided, else returns error."""
     try:
-        await ensure_memory_initialized()
-
         api_key = request.headers.get("X-API-Key")
         if not api_key and not os.environ.get("LLM_API_KEY"):
-            raise HTTPException(
-                status_code=401,
-                detail="API key required",
-            )
+            raise HTTPException(status_code=401, detail="API key required")
+
+        # Set API key before any Cognee interaction
+        old_key = os.environ.get("LLM_API_KEY", "")
+        if api_key:
+            os.environ["LLM_API_KEY"] = api_key
+        try:
+            await ensure_memory_initialized()
 
         # 1. Check memory for similar bugs
         recall = await recall_similar_bugs(req.error_message, req.stack_trace, api_key=api_key)
@@ -104,6 +106,11 @@ async def analyze_new_bug(req: NewBugRequest, request: Request):
             "analysis": analysis,
             "session_id": f"session_{datetime.now().timestamp()}",
         }
+        finally:
+            if old_key:
+                os.environ["LLM_API_KEY"] = old_key
+            elif api_key:
+                os.environ.pop("LLM_API_KEY", None)
     except HTTPException:
         raise
     except Exception as e:
