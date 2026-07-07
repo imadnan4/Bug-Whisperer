@@ -71,6 +71,9 @@ async def analyze_new_bug(req: NewBugRequest, request: Request):
         old_key = os.environ.get("LLM_API_KEY", "")
         if api_key:
             os.environ["LLM_API_KEY"] = api_key
+            # Clear Cognee's cached config so it re-reads the key
+            from cognee.infrastructure.llm.config import get_llm_config
+            get_llm_config.cache_clear()
 
         await ensure_memory_initialized()
 
@@ -115,6 +118,9 @@ async def analyze_new_bug(req: NewBugRequest, request: Request):
             os.environ["LLM_API_KEY"] = old_key
         elif api_key:
             os.environ.pop("LLM_API_KEY", None)
+        # Clear cache again so next request reads fresh
+        from cognee.infrastructure.llm.config import get_llm_config
+        get_llm_config.cache_clear()
 
 
 @app.post("/api/bugs/remember", response_model=dict)
