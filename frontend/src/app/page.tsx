@@ -86,6 +86,11 @@ export default function Home() {
       toast.error("Please enter an error message");
       return;
     }
+    if (!localStorage.getItem("bw_api_key")) {
+      toast.error("API key not set. Click 'Set API Key' in the header and paste your DeepSeek key.", { duration: 6000 });
+      setShowApiInput(true);
+      return;
+    }
     setAnalyzing(true);
     try {
       const result = await analyzeBug(errorMessage, stackTrace);

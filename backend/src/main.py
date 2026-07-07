@@ -94,7 +94,7 @@ async def analyze_new_bug(req: NewBugRequest, request: Request):
         severity=BugSeverity(analysis.get("severity", "medium")),
     )
     try:
-        await remember_bug(entry, from_memory=recall.found, confidence=recall.confidence)
+        await remember_bug(entry, from_memory=recall.found, confidence=recall.confidence, api_key=api_key)
     except Exception:
         pass  # Non-critical: memory storage can fail gracefully
 

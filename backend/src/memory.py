@@ -115,7 +115,7 @@ async def ensure_memory_initialized():
         _memory_initialized = True
 
 
-async def remember_bug(entry: BugMemoryEntry, from_memory: bool = False, confidence: float = 0.0) -> str:
+async def remember_bug(entry: BugMemoryEntry, from_memory: bool = False, confidence: float = 0.0, api_key: Optional[str] = None) -> str:
     """Store a bug in Cognee's memory"""
     memory_text = f"""
 BUG RECORD
@@ -134,7 +134,8 @@ Occurrences: {entry.occurrences}
 Times Recalled: {entry.recall_count}
 """
 
-    await cognee.remember(memory_text)
+    with _use_api_key(api_key):
+        await cognee.remember(memory_text)
     _record_bug(entry.error_message, entry.root_cause, entry.fix_description, entry.files_involved, from_memory, confidence)
     return entry.error_signature
 
