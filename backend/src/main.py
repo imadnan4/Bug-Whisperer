@@ -1,6 +1,7 @@
 """Bug Whisperer — FastAPI Backend"""
 
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional
@@ -60,12 +61,15 @@ async def root():
 
 @app.post("/api/bugs/analyze", response_model=dict)
 async def analyze_new_bug(req: NewBugRequest, request: Request):
-    """Analyze a new bug — checks memory first, then uses LLM.
-    Automatically saves the analysis to Cognee memory."""
+    """Analyze a new bug. Uses X-API-Key header if provided, else returns error."""
     await ensure_memory_initialized()
 
-    # Use user-provided API key if present, else server default
     api_key = request.headers.get("X-API-Key")
+    if not api_key and not os.environ.get("LLM_API_KEY"):
+        raise HTTPException(
+            status_code=401,
+            detail="API key required. Pass X-API-Key header or set LLM_API_KEY on server.",
+        )
 
     # 1. Check memory for similar bugs
     recall = await recall_similar_bugs(req.error_message, req.stack_trace, api_key=api_key)
@@ -89,7 +93,10 @@ async def analyze_new_bug(req: NewBugRequest, request: Request):
         language=req.language,
         severity=BugSeverity(analysis.get("severity", "medium")),
     )
-    await remember_bug(entry, from_memory=recall.found, confidence=recall.confidence)
+    try:
+        await remember_bug(entry, from_memory=recall.found, confidence=recall.confidence)
+    except Exception:
+        pass  # Non-critical: memory storage can fail gracefully
 
     return {
         "recall": recall.model_dump(),

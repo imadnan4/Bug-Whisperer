@@ -1,5 +1,17 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+function getApiKey(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("bw_api_key");
+}
+
+function headers(): Record<string, string> {
+  const h: Record<string, string> = { "Content-Type": "application/json" };
+  const key = getApiKey();
+  if (key) h["X-API-Key"] = key;
+  return h;
+}
+
 export interface BugAnalysis {
   recall: {
     found: boolean;
@@ -50,7 +62,7 @@ export async function analyzeBug(
 ): Promise<BugAnalysis> {
   const res = await fetch(`${API_BASE}/api/bugs/analyze`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: headers(),
     body: JSON.stringify({
       error_message: errorMessage,
       stack_trace: stackTrace,
@@ -72,7 +84,7 @@ export async function rememberFix(data: {
 }) {
   const res = await fetch(`${API_BASE}/api/bugs/remember`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: headers(),
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error("Failed to store fix");

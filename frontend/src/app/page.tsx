@@ -78,6 +78,8 @@ export default function Home() {
   const [sessionId, setSessionId] = useState<string>("");
   const [bugHistory, setBugHistory] = useState<Array<{ error: string; fromMemory: boolean; time: string }>>([]);
   const [memoryEntries, setMemoryEntries] = useState<MemoryEntry[]>([]);
+  const [apiKey, setApiKey] = useState("");
+  const [showApiInput, setShowApiInput] = useState(false);
 
   const handleAnalyze = useCallback(async () => {
     if (!errorMessage.trim()) {
@@ -133,6 +135,12 @@ export default function Home() {
 
   const { theme, setTheme } = useTheme();
 
+  const saveApiKey = () => {
+    localStorage.setItem("bw_api_key", apiKey);
+    setShowApiInput(false);
+    toast.success("API key saved");
+  };
+
   return (
       <div className="min-h-screen bg-background">
         {/* Header */}
@@ -148,6 +156,22 @@ export default function Home() {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              {showApiInput ? (
+                <div className="flex items-center gap-1">
+                  <Input
+                    placeholder="DeepSeek API key"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    className="w-40 h-8 text-xs font-mono"
+                    type="password"
+                  />
+                  <Button size="sm" variant="info" className="h-8 text-xs" onClick={saveApiKey}>Save</Button>
+                </div>
+              ) : (
+                <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setShowApiInput(true)}>
+                  Set API Key
+                </Button>
+              )}
               <ThemeSwitcher value={theme} onChange={setTheme} />
               <Badge variant="outline" className="border-violet-500/30 text-violet-600 dark:text-violet-300 bg-violet-500/5">
                 <Brain className="w-3 h-3 mr-1" />
