@@ -71,8 +71,8 @@ async def analyze_new_bug(req: NewBugRequest, request: Request):
         old_key = os.environ.get("LLM_API_KEY", "")
         if api_key:
             os.environ["LLM_API_KEY"] = api_key
-        try:
-            await ensure_memory_initialized()
+
+        await ensure_memory_initialized()
 
         # 1. Check memory for similar bugs
         recall = await recall_similar_bugs(req.error_message, req.stack_trace, api_key=api_key)
@@ -106,15 +106,15 @@ async def analyze_new_bug(req: NewBugRequest, request: Request):
             "analysis": analysis,
             "session_id": f"session_{datetime.now().timestamp()}",
         }
-        finally:
-            if old_key:
-                os.environ["LLM_API_KEY"] = old_key
-            elif api_key:
-                os.environ.pop("LLM_API_KEY", None)
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail="Analysis failed. Please check your API key and try again.")
+    finally:
+        if old_key:
+            os.environ["LLM_API_KEY"] = old_key
+        elif api_key:
+            os.environ.pop("LLM_API_KEY", None)
 
 
 @app.post("/api/bugs/remember", response_model=dict)
